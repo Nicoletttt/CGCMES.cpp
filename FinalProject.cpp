@@ -6,7 +6,7 @@
 
 using namespace std;
 
-// Structures for Members, Tasks, and Notes
+// Structures for User, Members, Tasks, and Notes
 
 struct Member {
     int id;
@@ -19,6 +19,8 @@ struct Task {
     int member_id;
     string task;
     string status;
+    string priority;
+    string deadline;
 };
 
 struct Note {
@@ -65,6 +67,17 @@ int get_points(string status) {
         return 0;
     }
     return 0;
+}
+
+int priority_order(string priority) {
+    if (priority == "High") {
+        return 1;
+    } else if (priority == "Medium") {
+        return 2;
+    } else if (priority == "Low") {
+        return 3;
+    }
+    return 4;
 }
 
 // Splits a string into parts using a seperator character and returns a vector of the parts
@@ -177,6 +190,17 @@ string pick_from_list(string prompt, vector<string> options) {
     }
 }
 
+void progress_bar(int value, int max_value, int bar){
+    if (max_value == 0) max_value = 1;
+    int filled = (value * bar) / max_value;
+    int percent = (value * 100) / max_value;
+
+    cout << "[";
+    for (int i = 0; i < bar; i++)
+    cout << (i < filled ? "=" : " ");
+    cout << "] " << percent << "%" << endl;
+}
+
 // Saves the members, tasks, and notes data to their respective .txt files
 
 void save_data() {
@@ -188,7 +212,7 @@ void save_data() {
 
     ofstream f_tasks(tasks_file);
     for (int i = 0; i < tasks.size(); i++) {
-        f_tasks << tasks[i].id << "|" << tasks[i].member_id << "|" << tasks[i].task << "|" << tasks[i].status << endl;
+        f_tasks << tasks[i].id << "|" << tasks[i].member_id << "|" << tasks[i].task << "|" << tasks[i].status << "|" << tasks[i].priority << "|" << tasks[i].deadline << endl;
     }
     f_tasks.close();
 
@@ -238,12 +262,14 @@ void load_data() {
 
             vector<string> parts = split_string(line, '|');
 
-            if (parts.size() >= 4) {
+            if (parts.size() >= 6) {
                 Task task;
                 task.id = stoi(parts[0]);
                 task.member_id = stoi(parts[1]);
                 task.task = parts[2];
                 task.status = parts[3];
+                task.priority = parts[4];
+                task.deadline = parts[5];
 
                 tasks.push_back(task);
             }
@@ -298,8 +324,11 @@ void view_evaluations();
 
 void add_member();
 void view_members_and_tasks();
+void edit_member();
 void delete_member();
+
 void add_task();
+void edit_task();
 void update_task_status();
 void delete_task();
 
@@ -335,7 +364,7 @@ void main_menu() {
          } else if (choice == "3") {
               view_evaluations();
          } else if (choice == "4") {
-              cout << "Exiting the program." << endl;
+              cout << "\nExiting the program." << endl;
               break;
          } else {
               cout << "Invalid number. Please try again." << endl;
@@ -350,13 +379,15 @@ void members_tasks_menu() {
        cout << "\nMembers and Tasks" << endl;
        cout << "1. Add Member" << endl;
        cout << "2. View Members and Tasks" << endl;
-       cout << "3. Delete Member" << endl;
-       cout << "4. Add Task" << endl;
-       cout << "5. Update Task Status" << endl;
-       cout << "6. Delete Task" << endl;
-       cout << "7. Back to Main Menu" << endl;
+       cout << "3. Edit Member" << endl;
+       cout << "4. Delete Member" << endl;
+       cout << "5. Add Task" << endl;
+       cout << "6. Edit Task" << endl;
+       cout << "7. Update Task Status" << endl;
+       cout << "8. Delete Task" << endl;
+       cout << "9. Back to Main Menu" << endl;
 
-       cout << "Please select an option (1-7): ";
+       cout << "Please select an option (1-9): ";
        string choice;
        getline(cin, choice);
        choice = strip(choice);
@@ -366,14 +397,18 @@ void members_tasks_menu() {
        } else if (choice == "2") {
            view_members_and_tasks();
        } else if (choice == "3") {
-           delete_member();
+           edit_member();
        } else if (choice == "4") {
-           add_task();
+           delete_member();
        } else if (choice == "5") {
-           update_task_status();
+           add_task();
        } else if (choice == "6") {
-           delete_task();
+           edit_task();
        } else if (choice == "7") {
+           update_task_status();
+       } else if (choice == "8") {
+           delete_task();
+       } else if (choice == "9") {
            break;
        } else {
            cout << "Invalid number. Please try again." << endl;
@@ -442,7 +477,7 @@ void view_evaluations() {
     cout << "Total Points: " << total_points << endl;
 
     if (members.empty()) {
-        cout << "No members to evaluate." << endl;
+        cout << "\nNo members to evaluate." << endl;
         return;
     }
 
@@ -457,6 +492,15 @@ void view_evaluations() {
             }
         }
     }
+
+    int max_score = 0;
+    for (int i = 0; i < ranked_members.size(); i++) {
+        int score = calculate_points(ranked_members[i].id);
+
+        if (score > max_score) {
+            max_score = score;
+        }
+    }
     
     cout << "\nMember Rankings:" << endl;
     for (int i = 0; i < ranked_members.size(); i++) {
@@ -465,15 +509,30 @@ void view_evaluations() {
         int complete_tasks = 0;
         int in_progress_tasks = 0;
         int incomplete_tasks = 0;
+        int high_priority = 0;
+        int medium_priority = 0;
+        int low_priority = 0;
 
-        for (int j = 0; j < tasks.size(); j++) {
-            if (tasks[j].member_id == ranked_members[i].id) {
-                if (tasks[j].status == "Complete") {
-                    complete_tasks++;
+       for (int j = 0; j < tasks.size(); j++) {
+           if (tasks[j].member_id == ranked_members[i].id) {
+               if (tasks[j].status == "Complete") {
+                   complete_tasks++;
+
                 } else if (tasks[j].status == "In Progress") {
-                    in_progress_tasks++;
+                   in_progress_tasks++;
+
                 } else if (tasks[j].status == "Incomplete") {
-                    incomplete_tasks++;
+                   incomplete_tasks++;
+                }
+
+               if (tasks[j].priority == "High") {
+                   high_priority++;
+
+                } else if (tasks[j].priority == "Medium") {
+                   medium_priority++;
+
+                } else if (tasks[j].priority == "Low") {
+                   low_priority++;
                 }
             }
         }
@@ -483,10 +542,16 @@ void view_evaluations() {
             role_text = " (" + ranked_members[i].role + ")";
         }
 
-        cout << i + 1 << " - " << ranked_members[i].name << role_text << " - Points: " << score << endl;
+        cout << "\n"<< i + 1 << " - " << ranked_members[i].name << role_text << " - Points: " << score << endl;
+
+        cout << "Progress: ";
+        progress_bar(score, max_score, 25);
+
         cout << "Completed Tasks: " << complete_tasks << endl;
         cout << "In Progress Tasks: " << in_progress_tasks << endl;
         cout << "Incomplete Tasks: " << incomplete_tasks << endl;
+
+        cout << "Priority: High: " << high_priority << "| Medium: " << medium_priority << "| Low: " << low_priority << endl;
     }
 
     cout << "\nScore: Complete = 3 points | In Progress = 1 point | Incomplete = 0 points" << endl;
@@ -547,19 +612,84 @@ void view_members_and_tasks() {
 
         cout << "\n[" << members[i].id << "] " << members[i].name << role_text << endl;
 
-        bool has_tasks = false;
+        vector<Task> member_tasks;
         for (int j = 0; j < tasks.size(); j++) {
             if (tasks[j].member_id == members[i].id) {
-                cout << " - " << tasks[j].task << endl;
-                cout << " Status: " << tasks[j].status << endl;
-                has_tasks = true;
+                member_tasks.push_back(tasks[j]);
             }
         }
 
-        if (!has_tasks) {
+        if (member_tasks.empty()) {
             cout << "No tasks assigned yet." << endl;
+            continue;
+        }
+
+        for (int a = 0; a < member_tasks.size(); a++) {
+            for (int b = a + 1; b < member_tasks.size(); b++) {
+                if (priority_order(member_tasks[b].priority) < priority_order(member_tasks[a].priority)) {
+                    Task temp = member_tasks[a];
+                    member_tasks[a] = member_tasks[b];
+                    member_tasks[b] = temp;
+
+                }
+            }
+        }
+
+
+        for (int j = 0; j < member_tasks.size(); j++) {
+            string deadline;
+
+            if (member_tasks[j].deadline != "") {
+                deadline = member_tasks[j].deadline;
+            } else {
+                deadline = "No deadline";
+            }
+                
+            cout << " - " << member_tasks[j].task << endl;
+            cout << " Status: " << member_tasks[j].status << endl;
+            cout << " Priority: " << member_tasks[j].priority << endl;
+            cout << " Deadline: " << deadline << endl;
         }
     }
+}
+
+
+// A function that allows users to edit name or role of an existing member
+
+void edit_member() {
+    cout <<"\nEdit Member" << endl;
+
+    if (members.empty()) {
+        cout << "No members to edit." << endl;
+        return;
+    }
+
+    vector<string> member_names;
+    for (int i = 0; i < members.size(); i++) 
+        member_names.push_back(to_string(members[i].id) + " - " + members[i].name);
+
+    cout << "Select a member to edit: " << endl;
+    string chosen = pick_from_list("Choice: ", member_names);
+    if (chosen == "") return;
+
+    int member_id = stoi(strip(split_string(chosen, '-')[0]));
+    Member* member = get_member(member_id);
+
+    cout << "Current name: " << member->name << endl;
+    cout << "Enter new name (press Enter to keep): ";
+    string new_name;
+    getline(cin, new_name);
+    new_name = strip(new_name);
+    if (new_name != "") member ->name = new_name;
+
+    cout << "Current role: " << member->role << endl;
+    cout << "Enter new role (press Enter to keep): ";
+    string new_role;
+    getline(cin, new_role);
+    if (new_role != "") member->role = new_role;
+
+    save_data();
+    cout << "Member updated successfully!" << endl;
 }
 
 // A function the allows users to delete an existing member along with their tasks
@@ -651,15 +781,28 @@ void add_task() {
     }
 
     vector<string> status_list = {"Incomplete", "In Progress", "Complete"};
+    vector<string> priority_list = {"High","Medium", "Low"};
+
     cout << "Select task status:" << endl;
     string chosen_status = pick_from_list("Choice: ", status_list);
     if (chosen_status == "") return;
+
+    cout << "Select task priority: " << endl;
+    string chosen_priority = pick_from_list("Choice: ", priority_list);
+    if (chosen_priority == "") return;
+
+    cout << "Enter deadline (Month - Day - Year) or press Enter to skip: ";
+    string deadline;
+    getline(cin, deadline);
+    deadline = strip(deadline);
 
     Task task;
     task.id = get_next_id();
     task.member_id = member_id;
     task.task = task_desc;
     task.status = chosen_status;
+    task.priority = chosen_priority;
+    task.deadline = deadline;
 
     tasks.push_back(task);
 
@@ -667,6 +810,59 @@ void add_task() {
     cout << "Task added successfully!" << endl;
 }
 
+void edit_task() {
+    cout << "\nEdit Task" << endl;
+ 
+    if (tasks.empty()) { 
+        cout << "No tasks to edit." << endl; 
+        return; }
+ 
+    vector<string> task_labels;
+    for (int i = 0; i < tasks.size(); i++) {
+        Member* member     = get_member(tasks[i].member_id);
+        string  member_name = (member != nullptr) ? member->name : "Unknown";
+        task_labels.push_back(member_name + " - " + tasks[i].task + " [" + tasks[i].status + "] [" + tasks[i].priority + "]");
+    }
+ 
+    cout << "Select a task to edit:" << endl;
+    string chosen_label = pick_from_list("Choice: ", task_labels);
+    if (chosen_label == "") return;
+ 
+    int chosen_index = -1;
+    for (int i = 0; i < task_labels.size(); i++) {
+        if (task_labels[i] == chosen_label) { chosen_index = i; break; }
+    }
+    if (chosen_index == -1) { cout << "Error: Invalid selection." << endl; return; }
+ 
+    // Edit description
+    cout << "Current description: " << tasks[chosen_index].task << endl;
+    cout << "Enter new description (press Enter to keep): ";
+    string new_desc;
+    getline(cin, new_desc);
+    new_desc = strip(new_desc);
+    if (new_desc != "") tasks[chosen_index].task = new_desc;
+ 
+    // Edit priority
+    cout << "Current priority: " << tasks[chosen_index].priority << endl;
+    cout << "Select new priority:" << endl;
+    vector<string> priority_list = {"High", "Medium", "Low"};
+    string new_priority = pick_from_list("Choice (or 0 to skip): ", priority_list);
+    if (new_priority != "") tasks[chosen_index].priority = new_priority;
+ 
+    // Edit deadline
+    string cur_dl = tasks[chosen_index].deadline != "" ?
+                    tasks[chosen_index].deadline : "None";
+    cout << "Current deadline: " << cur_dl << endl;
+    cout << "Enter new deadline (Month - Day - Year) or press Enter to keep: ";
+    string new_deadline;
+    getline(cin, new_deadline);
+    new_deadline = strip(new_deadline);
+    if (new_deadline != "") tasks[chosen_index].deadline = new_deadline;
+ 
+    save_data();
+    cout << "Task updated successfully!" << endl;
+}
+ 
 // A function that allows users to update the status of the task that was selected
 
 void update_task_status() {
